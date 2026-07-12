@@ -18,10 +18,10 @@ public class UserMapper {
     	
     	user.setName(request.getName());
     	user.setEmail(request.getEmail());
-    	user.setPassword(request.getPassword());
+
     	
     	user.setRole(Role.DISPATCHER);
-    	user.setCreatedAt(LocalDateTime.now());
+    	
     	return user;
     }
     public UserResponseDTO toResponse(User user) {

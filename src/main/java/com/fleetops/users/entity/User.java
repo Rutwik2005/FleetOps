@@ -31,4 +31,8 @@ public class User {
     private Role role;
 
     private LocalDateTime createdAt;
+    @PrePersist
+    public void prePersist() {
+        this.createdAt = LocalDateTime.now();
+    }
 }

@@ -1,5 +1,6 @@
 package com.fleetops.users.service.impl;
 
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import com.fleetops.common.exception.EmailAlreadyExistsException;
@@ -14,9 +15,10 @@ import com.fleetops.users.service.UserService;
 public class UserServiceImpl implements UserService {
 	private final UserRepository userRepository;
 	private final UserMapper userMapper;
+	private final PasswordEncoder passwordEncoder;
 	
-	
-    public UserServiceImpl(UserRepository userRepository, UserMapper userMapper) {
+    public UserServiceImpl(UserRepository userRepository, UserMapper userMapper, PasswordEncoder passwordEncoder) {
+		this.passwordEncoder = passwordEncoder;
 		this.userRepository = userRepository;
 		this.userMapper = userMapper;
 	}
@@ -28,7 +30,8 @@ public class UserServiceImpl implements UserService {
     	    throw new EmailAlreadyExistsException("Email already exists");
     	}
     	User user = userMapper.toEntity(request);
-    	
+    	user.setPassword(
+    	        passwordEncoder.encode(request.getPassword()));
     	User savedUser = userRepository.save(user);
     	
     	return userMapper.toResponse(savedUser);
