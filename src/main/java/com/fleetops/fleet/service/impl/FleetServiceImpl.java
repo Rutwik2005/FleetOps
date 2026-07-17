@@ -3,6 +3,8 @@ package com.fleetops.fleet.service.impl;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.fleetops.common.exception.FleetAlreadyExistsException;
@@ -33,10 +35,11 @@ public class FleetServiceImpl implements FleetService {
 	return fleetMapper.toResponse(savedFleet);
   }
   @Override
-  public List<FleetResponseDTO> getAllFleets() {
-	return fleetRepository.findAll().stream()
-			.map(fleetMapper::toResponse)
-			.collect(Collectors.toList());
+  public Page<FleetResponseDTO> getAllFleets(Pageable pageable) {
+
+      return fleetRepository.findAll(pageable)
+              .map(fleetMapper::toResponse);
+
   }
   @Override
   public FleetResponseDTO getFleetById(Long id) {

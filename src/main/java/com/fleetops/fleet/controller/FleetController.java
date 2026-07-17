@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import com.fleetops.fleet.dto.FleetRequestDTO;
 import com.fleetops.fleet.dto.FleetResponseDTO;
@@ -37,9 +39,12 @@ public class FleetController {
     }
 	
 	@GetMapping
-	public List<FleetResponseDTO> getAllFleets() {
-	    return fleetService.getAllFleets();
+	public Page<FleetResponseDTO> getAllFleets(Pageable pageable) {
+
+	    return fleetService.getAllFleets(pageable);
+
 	}
+	
 	@GetMapping("/{id}")
 	public FleetResponseDTO getFleetById(@PathVariable Long id) {
 		return fleetService.getFleetById(id);
