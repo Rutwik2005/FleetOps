@@ -28,4 +28,34 @@ public class GlobalExceptionHandler {
                 .body(error);
         
 	}
+	@ExceptionHandler(FleetAlreadyExistsException.class)
+	public ResponseEntity<ApiError> handleFleetAlreadyExistsException(
+	        FleetAlreadyExistsException ex,
+	        HttpServletRequest request) {
+
+	    ApiError error = new ApiError(
+	            LocalDateTime.now(),
+	            HttpStatus.CONFLICT.value(),
+	            HttpStatus.CONFLICT.getReasonPhrase(),
+	            ex.getMessage(),
+	            request.getRequestURI());
+
+	    return new ResponseEntity<>(error, HttpStatus.CONFLICT);
+	}
+	
+	@ExceptionHandler(ResourceNotFoundException.class)
+	public ResponseEntity<ApiError> handleResourceNotFound(
+	        ResourceNotFoundException ex,
+	        HttpServletRequest request) {
+
+	    ApiError error = new ApiError(
+	            LocalDateTime.now(),
+	            HttpStatus.NOT_FOUND.value(),
+	            HttpStatus.NOT_FOUND.getReasonPhrase(),
+	            ex.getMessage(),
+	            request.getRequestURI());
+
+	    return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+	}
+	
 }
