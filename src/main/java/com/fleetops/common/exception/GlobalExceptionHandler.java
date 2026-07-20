@@ -7,6 +7,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import com.fleetops.vehicle.exception.VehicleAlreadyExistsException;
+
 import jakarta.servlet.http.HttpServletRequest;
 
 @RestControllerAdvice
@@ -56,6 +58,20 @@ public class GlobalExceptionHandler {
 	            request.getRequestURI());
 
 	    return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+	}
+	@ExceptionHandler(VehicleAlreadyExistsException.class)
+	public ResponseEntity<ApiError> handleVehicleAlreadyExists(
+	        VehicleAlreadyExistsException ex,
+	        HttpServletRequest request) {
+
+	    ApiError error = new ApiError(
+	            LocalDateTime.now(),
+	            HttpStatus.CONFLICT.value(),
+	            HttpStatus.CONFLICT.getReasonPhrase(),
+	            ex.getMessage(),
+	            request.getRequestURI());
+
+	    return new ResponseEntity<>(error, HttpStatus.CONFLICT);
 	}
 	
 }
