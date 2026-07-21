@@ -73,5 +73,18 @@ public class GlobalExceptionHandler {
 
 	    return new ResponseEntity<>(error, HttpStatus.CONFLICT);
 	}
-	
+	@ExceptionHandler(DuplicateResourceException.class)
+	public ResponseEntity<ApiError> handleDuplicateResourceException(
+	        DuplicateResourceException ex,
+	        HttpServletRequest request) {
+
+	    ApiError error = new ApiError(
+	            LocalDateTime.now(),
+	            HttpStatus.CONFLICT.value(),
+	            HttpStatus.CONFLICT.getReasonPhrase(),
+	            ex.getMessage(),
+	            request.getRequestURI());
+
+	    return new ResponseEntity<>(error, HttpStatus.CONFLICT);
+	}
 }
