@@ -59,5 +59,27 @@ public class ShipmentController {
        shipmentService.deleteShipment(id);
    }
    
+   @PostMapping("/{id}/assign")
+   public ShipmentResponseDTO assignShipment(@PathVariable Long id) {
+
+       return shipmentService.assignShipment(id);
+   }
+   
+   @PostMapping("/{id}/dispatch")
+   public ShipmentResponseDTO dispatchShipment(@PathVariable Long id) {
+
+       return shipmentService.dispatchShipment(id);
+   }
+   
+   @PostMapping("/{id}/complete")
+   public ShipmentResponseDTO completeShipment(@PathVariable Long id) {
+
+       return shipmentService.completeShipment(id);
+   }
+   
+   @PostMapping("/{id}/cancel")
+   public ShipmentResponseDTO cancelShipment(@PathVariable Long id) {
+	   return shipmentService.cancelShipment(id);
+   }
    
 }

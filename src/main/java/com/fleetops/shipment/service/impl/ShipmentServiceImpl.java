@@ -4,6 +4,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import com.fleetops.common.exception.BusinessRuleViolationException;
 import com.fleetops.common.exception.DuplicateResourceException;
 import com.fleetops.common.exception.ResourceNotFoundException;
 import com.fleetops.driver.entity.Driver;
@@ -38,7 +39,8 @@ public class ShipmentServiceImpl  implements ShipmentService {
 		}
 		
 		if(request.getSource().equalsIgnoreCase(request.getDestination())) {
-			throw new IllegalArgumentException("Source and destination cannot be the same");
+			throw new BusinessRuleViolationException(
+			        "Source and destination cannot be the same");
 		}
 		
 		Vehicle vehicle = vehicleRepository.findById(request.getVehicleId())
@@ -48,17 +50,18 @@ public class ShipmentServiceImpl  implements ShipmentService {
 				.orElseThrow(() -> new ResourceNotFoundException("Driver with id " + request.getDriverId() + " not found"));
 		
 		if(vehicle.getStatus() != VehicleStatus.AVAILABLE) {
-			throw new IllegalArgumentException("Vehicle with id " + request.getVehicleId() + " is not available");
+			throw new BusinessRuleViolationException(
+			        "Vehicle with id " + request.getVehicleId() + " is not available");
 		}
 		
 		if (driver.getStatus() != DriverStatus.AVAILABLE) {
-	        throw new IllegalArgumentException(
-	                "Driver is not available");
+			throw new BusinessRuleViolationException(
+			        "Driver is not available");
 	    }
 
 	    if (!vehicle.getFleet().getId().equals(driver.getFleet().getId())) {
-	        throw new IllegalArgumentException(
-	                "Driver and Vehicle must belong to the same Fleet");
+	    	throw new BusinessRuleViolationException(
+	    	        "Driver and Vehicle must belong to the same Fleet");
 	    }
 		
 	    Shipment shipment =
@@ -99,8 +102,8 @@ public class ShipmentServiceImpl  implements ShipmentService {
 		}
         
         if (request.getSource().equalsIgnoreCase(request.getDestination())) {
-            throw new IllegalArgumentException(
-                    "Source and destination cannot be the same");
+        	throw new BusinessRuleViolationException(
+        	        "Source and destination cannot be the same");
         }  
         
         Vehicle vehicle = vehicleRepository.findById(request.getVehicleId())
@@ -114,18 +117,20 @@ public class ShipmentServiceImpl  implements ShipmentService {
                                 "Driver not found with id " + request.getDriverId()));
        
         if (vehicle.getStatus() != VehicleStatus.AVAILABLE) {
-            throw new IllegalArgumentException("Vehicle is not available");
+        	throw new BusinessRuleViolationException(
+        	        "Vehicle is not available");
         }
 
         // Driver Availability
         if (driver.getStatus() != DriverStatus.AVAILABLE) {
-            throw new IllegalArgumentException("Driver is not available");
+        	throw new BusinessRuleViolationException(
+        	        "Driver is not available");
         }
 
         // Fleet Validation
         if (!vehicle.getFleet().getId().equals(driver.getFleet().getId())) {
-            throw new IllegalArgumentException(
-                    "Driver and Vehicle must belong to the same Fleet");
+        	throw new BusinessRuleViolationException(
+        	        "Driver and Vehicle must belong to the same Fleet");
         }
         
         shipment.setShipmentNumber(request.getShipmentNumber());
@@ -159,17 +164,18 @@ public class ShipmentServiceImpl  implements ShipmentService {
 		                new ResourceNotFoundException(
 		                        "Shipment not found with id " + shipmentId));
 		if(shipment.getStatus()!=ShipmentStatus.CREATED) {
-			throw new IllegalStateException("Only Created shipments can be assigned.");	
+			throw new BusinessRuleViolationException(
+			        "Only CREATED shipments can be assigned.");
 		}
 		Driver driver = shipment.getDriver();
 		Vehicle vehicle = shipment.getVehicle();
 		
 		if(driver.getStatus() != DriverStatus.AVAILABLE) {
-			throw new IllegalStateException("Driver is not available.");
+			throw new BusinessRuleViolationException("Driver is not available.");
 		}
 		
 		if(vehicle.getStatus()!=VehicleStatus.AVAILABLE) {
-			throw new IllegalStateException("Vehicle is not available.");
+			throw new BusinessRuleViolationException("Vehicle is not available.");
 		}
 		
 	    driver.setStatus(DriverStatus.ON_TRIP);
@@ -194,8 +200,8 @@ public class ShipmentServiceImpl  implements ShipmentService {
 				  new ResourceNotFoundException(
 						  "Shipment not found with id " + shipmentId));
 		if (shipment.getStatus() != ShipmentStatus.ASSIGNED) {
-	        throw new IllegalStateException(
-	                "Only ASSIGNED shipments can be dispatched.");
+			throw new BusinessRuleViolationException(
+			        "Only ASSIGNED shipments can be dispatched.");
 	    }
 		shipment.setStatus(ShipmentStatus.IN_TRANSIT);
 	    shipment.setDispatchDate(LocalDateTime.now());
@@ -206,15 +212,65 @@ public class ShipmentServiceImpl  implements ShipmentService {
 	}
 
 	@Override
+	@Transactional
 	public ShipmentResponseDTO completeShipment(Long shipmentId) {
-		// TODO Auto-generated method stub
-		return null;
+		Shipment shipment = shipmentRepository.findById(shipmentId)
+				.orElseThrow(() ->
+				  new ResourceNotFoundException(
+						  "Shipment not found with id " + shipmentId));
+		if(shipment.getStatus() != ShipmentStatus.IN_TRANSIT) {
+			throw new BusinessRuleViolationException(
+			        "Only IN_TRANSIT shipments can be completed.");
+		}
+		
+		  Driver driver = shipment.getDriver();
+		    Vehicle vehicle = shipment.getVehicle();
+
+		    shipment.setStatus(ShipmentStatus.DELIVERED);
+		    shipment.setDeliveryDate(LocalDateTime.now());
+
+		    driver.setStatus(DriverStatus.AVAILABLE);
+
+		    vehicle.setStatus(VehicleStatus.AVAILABLE);
+
+		    driverRepository.save(driver);
+		    vehicleRepository.save(vehicle);
+
+		    Shipment updatedShipment = shipmentRepository.save(shipment);
+
+		    return shipmentMapper.toResponse(updatedShipment);
 	}
 
 	@Override
+	@Transactional
 	public ShipmentResponseDTO cancelShipment(Long shipmentId) {
-		// TODO Auto-generated method stub
-		return null;
+		Shipment shipment = shipmentRepository.findById(shipmentId)
+	            .orElseThrow(() ->
+	                    new ResourceNotFoundException(
+	                            "Shipment not found with id " + shipmentId));
+		 if (shipment.getStatus() == ShipmentStatus.IN_TRANSIT ||
+			        shipment.getStatus() == ShipmentStatus.DELIVERED ||
+			        shipment.getStatus() == ShipmentStatus.CANCELLED) {
+
+			 throw new BusinessRuleViolationException(
+				        "Shipment cannot be cancelled.");
+			    }
+		 if (shipment.getStatus() == ShipmentStatus.ASSIGNED) {
+
+		        Driver driver = shipment.getDriver();
+		        Vehicle vehicle = shipment.getVehicle();
+
+		        driver.setStatus(DriverStatus.AVAILABLE);
+		        vehicle.setStatus(VehicleStatus.AVAILABLE);
+
+		        driverRepository.save(driver);
+		        vehicleRepository.save(vehicle);
+		    }
+		 shipment.setStatus(ShipmentStatus.CANCELLED);
+
+		    Shipment updatedShipment = shipmentRepository.save(shipment);
+
+		    return shipmentMapper.toResponse(updatedShipment);
 	}
 	
 
