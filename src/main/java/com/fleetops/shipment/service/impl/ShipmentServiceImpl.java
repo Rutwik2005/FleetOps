@@ -10,6 +10,7 @@ import com.fleetops.common.exception.ResourceNotFoundException;
 import com.fleetops.driver.entity.Driver;
 import com.fleetops.driver.entity.DriverStatus;
 import com.fleetops.driver.repository.DriverRepository;
+import com.fleetops.event.producer.ShipmentEventProducer;
 import com.fleetops.shipment.dto.ShipmentRequestDTO;
 import com.fleetops.shipment.dto.ShipmentResponseDTO;
 import com.fleetops.shipment.entity.Shipment;
@@ -20,6 +21,8 @@ import com.fleetops.shipment.service.ShipmentService;
 import com.fleetops.vehicle.entity.Vehicle;
 import com.fleetops.vehicle.entity.VehicleStatus;
 import com.fleetops.vehicle.repository.VehicleRepository;
+import com.fleetops.event.dto.ShipmentEvent;
+import com.fleetops.event.dto.ShipmentEventType;
 
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +35,7 @@ public class ShipmentServiceImpl  implements ShipmentService {
     private final ShipmentRepository shipmentRepository;
     private final VehicleRepository vehicleRepository;
     private final DriverRepository driverRepository;
+    private final ShipmentEventProducer shipmentEventProducer;
 	@Override
 	public ShipmentResponseDTO createShipment(ShipmentRequestDTO request) {
 		if(shipmentRepository.existsByShipmentNumber(request.getShipmentNumber())) {
@@ -159,35 +163,58 @@ public class ShipmentServiceImpl  implements ShipmentService {
 	@Override
 	@Transactional
 	public ShipmentResponseDTO assignShipment(Long shipmentId) {
-		Shipment shipment = shipmentRepository.findById(shipmentId)
-		        .orElseThrow(() ->
-		                new ResourceNotFoundException(
-		                        "Shipment not found with id " + shipmentId));
-		if(shipment.getStatus()!=ShipmentStatus.CREATED) {
-			throw new BusinessRuleViolationException(
-			        "Only CREATED shipments can be assigned.");
-		}
-		Driver driver = shipment.getDriver();
-		Vehicle vehicle = shipment.getVehicle();
-		
-		if(driver.getStatus() != DriverStatus.AVAILABLE) {
-			throw new BusinessRuleViolationException("Driver is not available.");
-		}
-		
-		if(vehicle.getStatus()!=VehicleStatus.AVAILABLE) {
-			throw new BusinessRuleViolationException("Vehicle is not available.");
-		}
-		
+
+	    Shipment shipment = shipmentRepository.findById(shipmentId)
+	            .orElseThrow(() ->
+	                    new ResourceNotFoundException(
+	                            "Shipment not found with id " + shipmentId));
+
+	    if (shipment.getStatus() != ShipmentStatus.CREATED) {
+	        throw new BusinessRuleViolationException(
+	                "Only CREATED shipments can be assigned.");
+	    }
+
+	    Driver driver = shipment.getDriver();
+	    Vehicle vehicle = shipment.getVehicle();
+
+	    if (driver.getStatus() != DriverStatus.AVAILABLE) {
+	        throw new BusinessRuleViolationException(
+	                "Driver is not available.");
+	    }
+
+	    if (vehicle.getStatus() != VehicleStatus.AVAILABLE) {
+	        throw new BusinessRuleViolationException(
+	                "Vehicle is not available.");
+	    }
+
+	    // Update driver status
 	    driver.setStatus(DriverStatus.ON_TRIP);
 
+	    // Update vehicle status
 	    vehicle.setStatus(VehicleStatus.IN_TRANSIT);
 
+	    // Update shipment status
 	    shipment.setStatus(ShipmentStatus.ASSIGNED);
 
+	    // Save changes
 	    driverRepository.save(driver);
 	    vehicleRepository.save(vehicle);
 
-	    Shipment updatedShipment = shipmentRepository.save(shipment);
+	    Shipment updatedShipment =
+	            shipmentRepository.save(shipment);
+
+	    // Create Kafka event
+	    ShipmentEvent event = new ShipmentEvent(
+	            ShipmentEventType.SHIPMENT_ASSIGNED,
+	            updatedShipment.getId(),
+	            updatedShipment.getShipmentNumber(),
+	            vehicle.getId(),
+	            driver.getId(),
+	            LocalDateTime.now()
+	    );
+
+	    // Publish event to Kafka
+	    shipmentEventProducer.publishShipmentEvent(event);
 
 	    return shipmentMapper.toResponse(updatedShipment);
 	}
@@ -207,6 +234,18 @@ public class ShipmentServiceImpl  implements ShipmentService {
 	    shipment.setDispatchDate(LocalDateTime.now());
 
 	    Shipment updatedShipment = shipmentRepository.save(shipment);
+	    // Create Kafka event
+	    ShipmentEvent event = new ShipmentEvent(
+	            ShipmentEventType.SHIPMENT_DISPATCHED,
+	            updatedShipment.getId(),
+	            updatedShipment.getShipmentNumber(),
+	            updatedShipment.getVehicle().getId(),
+	            updatedShipment.getDriver().getId(),
+	            LocalDateTime.now()
+	    );
+
+	    // Publish event
+	    shipmentEventProducer.publishShipmentEvent(event);
 
 	    return shipmentMapper.toResponse(updatedShipment);
 	}
@@ -237,6 +276,18 @@ public class ShipmentServiceImpl  implements ShipmentService {
 		    vehicleRepository.save(vehicle);
 
 		    Shipment updatedShipment = shipmentRepository.save(shipment);
+		    // Create Kafka event
+		    ShipmentEvent event = new ShipmentEvent(
+		            ShipmentEventType.SHIPMENT_COMPLETED,
+		            updatedShipment.getId(),
+		            updatedShipment.getShipmentNumber(),
+		            vehicle.getId(),
+		            driver.getId(),
+		            LocalDateTime.now()
+		    );
+
+		    // Publish event
+		    shipmentEventProducer.publishShipmentEvent(event);
 
 		    return shipmentMapper.toResponse(updatedShipment);
 	}
@@ -255,11 +306,11 @@ public class ShipmentServiceImpl  implements ShipmentService {
 			 throw new BusinessRuleViolationException(
 				        "Shipment cannot be cancelled.");
 			    }
-		 if (shipment.getStatus() == ShipmentStatus.ASSIGNED) {
+		 
 
 		        Driver driver = shipment.getDriver();
 		        Vehicle vehicle = shipment.getVehicle();
-
+		 if (shipment.getStatus() == ShipmentStatus.ASSIGNED) {
 		        driver.setStatus(DriverStatus.AVAILABLE);
 		        vehicle.setStatus(VehicleStatus.AVAILABLE);
 
@@ -269,6 +320,18 @@ public class ShipmentServiceImpl  implements ShipmentService {
 		 shipment.setStatus(ShipmentStatus.CANCELLED);
 
 		    Shipment updatedShipment = shipmentRepository.save(shipment);
+		    // Create Kafka event
+		    ShipmentEvent event = new ShipmentEvent(
+		            ShipmentEventType.SHIPMENT_CANCELLED,
+		            updatedShipment.getId(),
+		            updatedShipment.getShipmentNumber(),
+		            vehicle != null ? vehicle.getId() : null,
+		            driver != null ? driver.getId() : null,
+		            LocalDateTime.now()
+		    );
+
+		    // Publish event
+		    shipmentEventProducer.publishShipmentEvent(event);
 
 		    return shipmentMapper.toResponse(updatedShipment);
 	}
