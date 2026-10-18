@@ -95,70 +95,113 @@ public class ShipmentServiceImpl  implements ShipmentService {
 	    return shipmentMapper.toResponse(shipment);
 	}
 
-	@Override
-	public ShipmentResponseDTO updateShipment(Long id, ShipmentRequestDTO request) {
-		Shipment shipment = shipmentRepository.findById(id)
-	            .orElseThrow(() ->
-	                    new ResourceNotFoundException(
-	                            "Shipment not found with id " + id));
-        if(!shipment.getShipmentNumber().equals(request.getShipmentNumber()) && shipmentRepository.existsByShipmentNumber(request.getShipmentNumber())) {
-			throw new DuplicateResourceException("Shipment with  number"+request.getShipmentNumber() + "already exists");
-		}
-        
-        if (request.getSource().equalsIgnoreCase(request.getDestination())) {
-        	throw new BusinessRuleViolationException(
-        	        "Source and destination cannot be the same");
-        }  
-        
-        Vehicle vehicle = vehicleRepository.findById(request.getVehicleId())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Vehicle not found with id " + request.getVehicleId()));
-        
-        Driver driver = driverRepository.findById(request.getDriverId())
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Driver not found with id " + request.getDriverId()));
-       
-        if (vehicle.getStatus() != VehicleStatus.AVAILABLE) {
-        	throw new BusinessRuleViolationException(
-        	        "Vehicle is not available");
-        }
 
-        // Driver Availability
-        if (driver.getStatus() != DriverStatus.AVAILABLE) {
-        	throw new BusinessRuleViolationException(
-        	        "Driver is not available");
-        }
+@Override
+@Transactional
+public ShipmentResponseDTO updateShipment(
+        Long id,
+        ShipmentRequestDTO request) {
 
-        // Fleet Validation
-        if (!vehicle.getFleet().getId().equals(driver.getFleet().getId())) {
-        	throw new BusinessRuleViolationException(
-        	        "Driver and Vehicle must belong to the same Fleet");
-        }
-        
-        shipment.setShipmentNumber(request.getShipmentNumber());
-        shipment.setSource(request.getSource());
-        shipment.setDestination(request.getDestination());
-        shipment.setCargoDescription(request.getCargoDescription());
-        shipment.setWeight(request.getWeight());
+    // 1. Find the shipment
+    Shipment shipment = shipmentRepository.findById(id)
+            .orElseThrow(() ->
+                    new ResourceNotFoundException(
+                            "Shipment not found with id " + id));
 
-        shipment.setVehicle(vehicle);
-        shipment.setDriver(driver);
+    // 2. Only CREATED shipments can be updated
+    if (shipment.getStatus() != ShipmentStatus.CREATED) {
+        throw new BusinessRuleViolationException(
+                "Only CREATED shipments can be updated.");
+    }
 
-        Shipment updatedShipment = shipmentRepository.save(shipment);
+    // 3. Check for duplicate shipment number
+    if (!shipment.getShipmentNumber().equals(request.getShipmentNumber())
+            && shipmentRepository.existsByShipmentNumber(
+                    request.getShipmentNumber())) {
+        throw new DuplicateResourceException(
+                "Shipment with number "
+                        + request.getShipmentNumber()
+                        + " already exists.");
+    }
 
-        return shipmentMapper.toResponse(updatedShipment);
-	}
+    // 4. Validate source and destination
+    if (request.getSource().equalsIgnoreCase(request.getDestination())) {
+        throw new BusinessRuleViolationException(
+                "Source and destination cannot be the same.");
+    }
 
-	@Override
-	public void deleteShipment(Long id) {
-		Shipment shipment = shipmentRepository.findById(id)
-	            .orElseThrow(() ->
-	                    new ResourceNotFoundException(
-	                            "Shipment not found with id " + id));
-	    shipmentRepository.delete(shipment);
-	}
+    // 5. Find the requested vehicle
+    Vehicle vehicle = vehicleRepository.findById(request.getVehicleId())
+            .orElseThrow(() ->
+                    new ResourceNotFoundException(
+                            "Vehicle not found with id "
+                                    + request.getVehicleId()));
+
+    // 6. Find the requested driver
+    Driver driver = driverRepository.findById(request.getDriverId())
+            .orElseThrow(() ->
+                    new ResourceNotFoundException(
+                            "Driver not found with id "
+                                    + request.getDriverId()));
+
+    // 7. Check vehicle availability
+    if (vehicle.getStatus() != VehicleStatus.AVAILABLE) {
+        throw new BusinessRuleViolationException(
+                "Vehicle is not available.");
+    }
+
+    // 8. Check driver availability
+    if (driver.getStatus() != DriverStatus.AVAILABLE) {
+        throw new BusinessRuleViolationException(
+                "Driver is not available.");
+    }
+
+    // 9. Driver and vehicle must belong to the same fleet
+    if (!vehicle.getFleet().getId()
+            .equals(driver.getFleet().getId())) {
+        throw new BusinessRuleViolationException(
+                "Driver and Vehicle must belong to the same Fleet.");
+    }
+
+    // 10. Update shipment details
+    shipment.setShipmentNumber(request.getShipmentNumber());
+    shipment.setSource(request.getSource());
+    shipment.setDestination(request.getDestination());
+    shipment.setCargoDescription(request.getCargoDescription());
+    shipment.setWeight(request.getWeight());
+    shipment.setVehicle(vehicle);
+    shipment.setDriver(driver);
+
+    // 11. Save and return the updated shipment
+    Shipment updatedShipment = shipmentRepository.save(shipment);
+
+    return shipmentMapper.toResponse(updatedShipment);
+}
+
+
+
+@Override
+@Transactional
+public void deleteShipment(Long id) {
+
+    // 1. Find the shipment
+    Shipment shipment = shipmentRepository.findById(id)
+            .orElseThrow(() ->
+                    new ResourceNotFoundException(
+                            "Shipment not found with id " + id));
+
+    // 2. Preserve shipments that have entered the operational lifecycle
+    if (shipment.getStatus() != ShipmentStatus.CREATED) {
+        throw new BusinessRuleViolationException(
+                "Only CREATED shipments can be deleted. "
+                        + "Shipments that have entered the operational "
+                        + "lifecycle must be retained for record-keeping.");
+    }
+
+    // 3. Delete the shipment
+    shipmentRepository.delete(shipment);
+}
+
 
 	@Override
 	@Transactional
